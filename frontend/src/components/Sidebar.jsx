@@ -8,7 +8,7 @@ const Sidebar = ({ isOpen }) => {
     <aside
       className={`${
         isOpen ? "w-52" : "w-0 md:w-20"
-      } bg-zinc-900 border-r border-zinc-800 transition-all duration-200 overflow-hidden hidden sm:block`}
+      } bg-zinc-900 border-r border-zinc-800 transition-all duration-200 overflow-hidden hidden xs:block`}
     >
       <nav className="flex flex-col py-4">
         <Link

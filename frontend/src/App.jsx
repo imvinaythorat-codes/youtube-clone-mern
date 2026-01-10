@@ -16,7 +16,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="flex flex-col h-screen bg-zinc-900 text-white">
+        <div className="flex flex-col min-h-screen bg-zinc-900 text-white">
           <Header
             onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           />
