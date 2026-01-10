@@ -1,12 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api"
-});
-
-const Api = axios.create({
   baseURL: "https://youtube-clone-mern-ers8.onrender.com/api",
 });
+
 
 api.interceptors.request.use(
   (config) => {
