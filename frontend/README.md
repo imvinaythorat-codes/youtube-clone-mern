@@ -180,19 +180,6 @@ npm run dev
 
 ---
 
-## STEP 7 – Ready-to-paste README commit commands
-
-From the **repo root**:
-
-```pwsh path=null start=null
-cd C:\Users\USER\youtube-clone-mern
-
-git add README.md
-git commit -m "Docs: add detailed project README with setup and API info"
-
-git push
--------------------------------------------------------------------------
-
 Vite dev server runs on http://localhost:5173.
 
 Usage
