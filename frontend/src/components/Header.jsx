@@ -86,7 +86,7 @@ const Header = ({ onToggleSidebar }) => {
             >
               Logout
             </button>
-          </>>
+          </>
         ) : (
           <button
             onClick={() => navigate("/login")}
