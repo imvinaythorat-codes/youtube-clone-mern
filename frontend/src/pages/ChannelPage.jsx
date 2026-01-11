@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 
 const ChannelPage = () => {
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
 
   const [channel, setChannel] = useState(null);
   const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const [showForm, setShowForm] = useState(false);
-  const [editingVideoId, setEditingVideoId] = useState(null);
+  // Forms
+  const [channelForm, setChannelForm] = useState({
+    channelName: "",
+    banner: "",
+    description: ""
+  });
 
   const [videoForm, setVideoForm] = useState({
     title: "",
@@ -20,258 +26,536 @@ const ChannelPage = () => {
     category: ""
   });
 
-  // 🔹 FETCH CHANNEL + VIDEOS USING EXISTING BACKEND ROUTES
+  const [editingVideo, setEditingVideo] = useState(null);
+  const [showVideoForm, setShowVideoForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+
+  // Fetch channel on mount
   useEffect(() => {
-    const fetchChannelAndVideos = async () => {
-      try {
-        if (!user || !user.channel) {
-          setLoading(false);
-          return;
-        }
-
-        const channelRes = await api.get(`/channels/${user.channel}`);
-        setChannel(channelRes.data);
-
-        const videosRes = await api.get(
-          `/channels/${user.channel}/videos`
-        );
-        setVideos(videosRes.data || []);
-      } catch (error) {
-        console.error("Channel fetch error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (isAuthenticated) {
-      fetchChannelAndVideos();
+      fetchMyChannel();
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  const handleChange = (e) => {
-    setVideoForm({ ...videoForm, [e.target.name]: e.target.value });
+  // Fetch MY channel (for channel owner)
+  const fetchMyChannel = async () => {
+    try {
+      const res = await api.get("/channels/my-channel");
+      if (res.data && res.data._id) {
+        setChannel(res.data);
+        fetchVideos(res.data._id);
+      }
+    } catch (err) {
+      console.log("No channel found");
+    }
   };
 
-  const resetForm = () => {
-    setVideoForm({
-      title: "",
-      description: "",
-      thumbnailUrl: "",
-      videoUrl: "",
-      category: ""
-    });
-    setEditingVideoId(null);
-    setShowForm(false);
+  // Fetch all videos for this channel
+  const fetchVideos = async (channelId) => {
+    try {
+      const res = await api.get(`/videos?channelId=${channelId}`);
+      setVideos(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // 🔹 CREATE / UPDATE VIDEO
-  const handleSubmit = async (e) => {
+  // ============== CREATE CHANNEL ==============
+  const handleCreateChannel = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await api.post("/channels", channelForm);
+      setChannel(res.data);
+      setLoading(false);
+      alert("Channel created successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Error creating channel: " + (err.response?.data?.message || err.message));
+      setLoading(false);
+    }
+  };
+
+  // ============== CREATE VIDEO ==============
+  const handleVideoSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...videoForm,
+        channelId: channel._id,
+        uploader: user.userId
+      };
+      
+      const res = await api.post("/videos", payload);
+      setVideos((prev) => [res.data, ...prev]);
+      setShowVideoForm(false);
+      setVideoForm({
+        title: "",
+        description: "",
+        thumbnailUrl: "",
+        videoUrl: "",
+        category: ""
+      });
+      alert("Video uploaded successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Error uploading video: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // ============== EDIT VIDEO ==============
+  const handleEditVideo = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.put(`/videos/${editingVideo._id}`, editingVideo);
+      
+      setVideos((prev) =>
+        prev.map((v) => (v._id === editingVideo._id ? res.data : v))
+      );
+      
+      setShowEditForm(false);
+      setEditingVideo(null);
+      alert("Video updated successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Error updating video: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // ============== DELETE VIDEO ==============
+  const handleDeleteVideo = async (videoId) => {
+    if (!window.confirm("Are you sure you want to delete this video?")) return;
 
     try {
-      if (editingVideoId) {
-        const res = await api.put(
-          `/videos/${editingVideoId}`,
-          videoForm
-        );
-        setVideos((prev) =>
-          prev.map((v) =>
-            v._id === editingVideoId ? res.data : v
-          )
-        );
-      } else {
-        const res = await api.post("/videos", videoForm);
-        setVideos((prev) => [res.data, ...prev]);
-      }
-      resetForm();
-    } catch (error) {
-      console.error("Video submit error:", error);
+      await api.delete(`/videos/${videoId}`);
+      setVideos((prev) => prev.filter((v) => v._id !== videoId));
+      alert("Video deleted successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting video: " + (err.response?.data?.message || err.message));
     }
   };
 
-  const handleEdit = (video) => {
-    setEditingVideoId(video._id);
-    setVideoForm({
+  // Start editing a video
+  const startEdit = (video) => {
+    setEditingVideo({
+      _id: video._id,
       title: video.title,
       description: video.description,
       thumbnailUrl: video.thumbnailUrl,
       videoUrl: video.videoUrl,
       category: video.category
     });
-    setShowForm(true);
+    setShowEditForm(true);
+    setShowVideoForm(false);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this video?")) return;
+  // ============== RENDER ==============
 
-    try {
-      await api.delete(`/videos/${id}`);
-      setVideos((prev) => prev.filter((v) => v._id !== id));
-    } catch (error) {
-      console.error("Delete video error:", error);
-    }
-  };
-
-  // 🔒 AUTH GUARDS
   if (!isAuthenticated) {
     return (
-      <div className="p-4 text-sm text-zinc-400">
-        Sign in to manage your channel.
+      <div className="min-h-screen bg-zinc-950 text-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg mb-4">Please login to view or create a channel</p>
+          <button
+            onClick={() => navigate("/login")}
+            className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+          >
+            Login
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (loading) {
+  if (!channel) {
     return (
-      <div className="p-4 text-sm text-zinc-400">
-        Loading channel...
-      </div>
-    );
-  }
+      <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-8">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-2xl md:text-3xl font-bold mb-6">
+            Create Your Channel
+          </h2>
 
-  if (!user?.channel) {
-    return (
-      <div className="p-4 text-sm text-zinc-400">
-        You don’t have a channel yet. Create one first.
+          <form
+            onSubmit={handleCreateChannel}
+            className="space-y-4 bg-zinc-900 p-6 rounded-lg"
+          >
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Channel Name *
+              </label>
+              <input
+                type="text"
+                placeholder="Enter channel name"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={channelForm.channelName}
+                onChange={(e) =>
+                  setChannelForm({ ...channelForm, channelName: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Banner Image URL
+              </label>
+              <input
+                type="url"
+                placeholder="https://example.com/banner.jpg"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={channelForm.banner}
+                onChange={(e) =>
+                  setChannelForm({ ...channelForm, banner: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Description *
+              </label>
+              <textarea
+                placeholder="Describe your channel"
+                rows="4"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={channelForm.description}
+                onChange={(e) =>
+                  setChannelForm({ ...channelForm, description: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full px-6 py-3 bg-blue-600 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Creating..." : "Create Channel"}
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 space-y-6">
-      {/* CHANNEL HEADER */}
-      <div>
-        <h2 className="text-xl font-semibold">
-          {channel?.channelName}
-        </h2>
-        <p className="text-sm text-zinc-400">
-          {channel?.description}
-        </p>
-      </div>
-
-      {/* UPLOAD BUTTON */}
-      <button
-        onClick={() => setShowForm(true)}
-        className="px-4 py-2 bg-blue-600 rounded text-sm"
-      >
-        Upload Video
-      </button>
-
-      {/* UPLOAD / EDIT FORM */}
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-3 bg-zinc-900 p-4 rounded"
-        >
-          <h3 className="text-sm font-semibold">
-            {editingVideoId ? "Edit Video" : "Upload Video"}
-          </h3>
-
-          <input
-            name="title"
-            placeholder="Title"
-            value={videoForm.title}
-            onChange={handleChange}
-            className="w-full p-2 bg-zinc-800 rounded"
-            required
+    <div className="min-h-screen bg-zinc-950 text-white">
+      {channel.banner && (
+        <div className="w-full h-32 md:h-48 lg:h-64 overflow-hidden">
+          <img
+            src={channel.banner}
+            alt={channel.channelName}
+            className="w-full h-full object-cover"
           />
-
-          <input
-            name="thumbnailUrl"
-            placeholder="Thumbnail URL"
-            value={videoForm.thumbnailUrl}
-            onChange={handleChange}
-            className="w-full p-2 bg-zinc-800 rounded"
-            required
-          />
-
-          <input
-            name="videoUrl"
-            placeholder="Video URL (YouTube embed)"
-            value={videoForm.videoUrl}
-            onChange={handleChange}
-            className="w-full p-2 bg-zinc-800 rounded"
-            required
-          />
-
-          <input
-            name="category"
-            placeholder="Category"
-            value={videoForm.category}
-            onChange={handleChange}
-            className="w-full p-2 bg-zinc-800 rounded"
-            required
-          />
-
-          <textarea
-            name="description"
-            placeholder="Description"
-            value={videoForm.description}
-            onChange={handleChange}
-            className="w-full p-2 bg-zinc-800 rounded"
-            rows="3"
-            required
-          />
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="px-4 py-1 bg-green-600 rounded text-sm"
-            >
-              {editingVideoId ? "Update" : "Create"}
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-4 py-1 bg-zinc-700 rounded text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
-      {/* VIDEO LIST */}
-      <div className="space-y-3">
-        {videos.map((video) => (
-          <div
-            key={video._id}
-            className="flex justify-between items-center bg-zinc-900 p-3 rounded"
-          >
-            <div>
-              <p className="text-sm font-semibold">
-                {video.title}
-              </p>
-              <p className="text-xs text-zinc-400">
-                {video.category}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleEdit(video)}
-                className="text-xs text-blue-400"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDelete(video._id)}
-                className="text-xs text-red-400"
-              >
-                Delete
-              </button>
-            </div>
+      <div className="p-4 md:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-4xl font-bold mb-2">
+              {channel.channelName}
+            </h1>
+            <p className="text-sm md:text-base text-zinc-400 mb-2">
+              {channel.description}
+            </p>
+            <p className="text-sm text-zinc-500">
+              {channel.subscribers || 0} subscribers • {videos.length} videos
+            </p>
           </div>
-        ))}
 
-        {videos.length === 0 && (
-          <p className="text-xs text-zinc-400">
-            No videos yet. Upload your first one.
-          </p>
+          <button
+            onClick={() => {
+              setShowVideoForm(!showVideoForm);
+              setShowEditForm(false);
+            }}
+            className="px-6 py-3 bg-blue-600 rounded-lg font-semibold hover:bg-blue-700 whitespace-nowrap"
+          >
+            {showVideoForm ? "Cancel" : "Upload Video"}
+          </button>
+        </div>
+
+        {showVideoForm && (
+          <form
+            onSubmit={handleVideoSubmit}
+            className="space-y-4 bg-zinc-900 p-6 rounded-lg"
+          >
+            <h3 className="text-xl font-semibold mb-4">Upload New Video</h3>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Title *</label>
+              <input
+                type="text"
+                placeholder="Video title"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={videoForm.title}
+                onChange={(e) =>
+                  setVideoForm({ ...videoForm, title: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Thumbnail URL *
+              </label>
+              <input
+                type="url"
+                placeholder="https://example.com/thumbnail.jpg"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={videoForm.thumbnailUrl}
+                onChange={(e) =>
+                  setVideoForm({ ...videoForm, thumbnailUrl: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Video URL *
+              </label>
+              <input
+                type="url"
+                placeholder="https://example.com/video.mp4"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={videoForm.videoUrl}
+                onChange={(e) =>
+                  setVideoForm({ ...videoForm, videoUrl: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Category *
+              </label>
+              <select
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={videoForm.category}
+                onChange={(e) =>
+                  setVideoForm({ ...videoForm, category: e.target.value })
+                }
+                required
+              >
+                <option value="">Select category</option>
+                <option value="Music">Music</option>
+                <option value="Gaming">Gaming</option>
+                <option value="Education">Education</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Technology">Technology</option>
+                <option value="Sports">Sports</option>
+                <option value="News">News</option>
+                <option value="Cooking">Cooking</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Description *
+              </label>
+              <textarea
+                placeholder="Video description"
+                rows="4"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                value={videoForm.description}
+                onChange={(e) =>
+                  setVideoForm({ ...videoForm, description: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full px-6 py-3 bg-green-600 rounded-lg font-semibold hover:bg-green-700"
+            >
+              Upload Video
+            </button>
+          </form>
         )}
+
+        {showEditForm && editingVideo && (
+          <form
+            onSubmit={handleEditVideo}
+            className="space-y-4 bg-zinc-900 p-6 rounded-lg border-2 border-yellow-600"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold">Edit Video</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditForm(false);
+                  setEditingVideo(null);
+                }}
+                className="text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Title</label>
+              <input
+                type="text"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-white"
+                value={editingVideo.title}
+                onChange={(e) =>
+                  setEditingVideo({ ...editingVideo, title: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Thumbnail URL
+              </label>
+              <input
+                type="url"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-white"
+                value={editingVideo.thumbnailUrl}
+                onChange={(e) =>
+                  setEditingVideo({
+                    ...editingVideo,
+                    thumbnailUrl: e.target.value
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Video URL
+              </label>
+              <input
+                type="url"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-white"
+                value={editingVideo.videoUrl}
+                onChange={(e) =>
+                  setEditingVideo({ ...editingVideo, videoUrl: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Category</label>
+              <select
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-white"
+                value={editingVideo.category}
+                onChange={(e) =>
+                  setEditingVideo({ ...editingVideo, category: e.target.value })
+                }
+                required
+              >
+                <option value="Music">Music</option>
+                <option value="Gaming">Gaming</option>
+                <option value="Education">Education</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Technology">Technology</option>
+                <option value="Sports">Sports</option>
+                <option value="News">News</option>
+                <option value="Cooking">Cooking</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Description
+              </label>
+              <textarea
+                rows="4"
+                className="w-full p-3 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-white"
+                value={editingVideo.description}
+                onChange={(e) =>
+                  setEditingVideo({
+                    ...editingVideo,
+                    description: e.target.value
+                  })
+                }
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full px-6 py-3 bg-yellow-600 rounded-lg font-semibold hover:bg-yellow-700"
+            >
+              Save Changes
+            </button>
+          </form>
+        )}
+
+        <div>
+          <h2 className="text-xl font-semibold mb-4">
+            Channel Videos ({videos.length})
+          </h2>
+
+          {videos.length === 0 ? (
+            <p className="text-zinc-400 text-center py-8">
+              No videos uploaded yet.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {videos.map((video) => (
+                <div
+                  key={video._id}
+                  className="bg-zinc-900 rounded-lg overflow-hidden hover:bg-zinc-800 transition"
+                >
+                  <div
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/video/${video._id}`)}
+                  >
+                    <img
+                      src={video.thumbnailUrl}
+                      alt={video.title}
+                      className="w-full h-40 object-cover"
+                    />
+                  </div>
+
+                  <div className="p-3">
+                    <h3
+                      className="font-semibold mb-1 line-clamp-2 cursor-pointer hover:text-blue-400"
+                      onClick={() => navigate(`/video/${video._id}`)}
+                    >
+                      {video.title}
+                    </h3>
+                    <p className="text-xs text-zinc-400 mb-2">
+                      {video.category}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {video.views || 0} views
+                    </p>
+
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => startEdit(video)}
+                        className="flex-1 px-3 py-1.5 bg-yellow-600 rounded text-sm font-medium hover:bg-yellow-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteVideo(video._id)}
+                        className="flex-1 px-3 py-1.5 bg-red-600 rounded text-sm font-medium hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
 export default ChannelPage;
-
