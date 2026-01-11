@@ -342,3 +342,8 @@ Channel & video management
 🔗 GitHub Repository
 
 👉 https://github.com/imvinaythorat-codes/youtube-clone-mern
+
+## 🌍 Live Demo
+
+Frontend: https://youtube-clone-mern.netlify.app  
+Backend: https://youtube-clone-mern-ers8.onrender.com
