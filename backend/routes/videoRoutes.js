@@ -1,29 +1,20 @@
 import express from "express";
 import {
-  getAllVideos,
-  getVideoById,
-  createVideo,
-  updateVideo,
-  deleteVideo,
-  likeVideo,
-  dislikeVideo
-} from "../controllers/videoController.js";
+  getCommentsForVideo,
+  addComment,
+  updateComment,
+  deleteComment
+} from "../controllers/commentController.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Public: list videos with search & category filters
-router.get("/", getAllVideos);
+// Video-level routes
+router.get("/video/:videoId", getCommentsForVideo);
+router.post("/video/:videoId", authMiddleware, addComment);
 
-// Public: get single video
-router.get("/:id", getVideoById);
-
-// Protected: create, update, delete, like/dislike
-router.post("/", authMiddleware, createVideo);
-router.put("/:id", authMiddleware, updateVideo);
-router.delete("/:id", authMiddleware, deleteVideo);
-
-router.post("/:id/like", authMiddleware, likeVideo);
-router.post("/:id/dislike", authMiddleware, dislikeVideo);
+// Comment-level routes
+router.put("/:id", authMiddleware, updateComment);
+router.delete("/:id", authMiddleware, deleteComment);
 
 export default router;
